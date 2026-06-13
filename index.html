@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>スライドパズル</title>
+
+<style>
+body { font-family: sans-serif; padding:20px; }
+
+#board {
+  display: grid;
+  grid-template-columns: repeat(4, 60px);
+  gap: 5px;
+  margin-top: 20px;
+}
+
+.tile {
+  width: 60px;
+  height: 60px;
+  border: 1px solid #333;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 20px;
+  background: white;
+}
+
+.empty { background: #eee; }
+
+input { margin-top:5px; width:300px; }
+button { margin:5px; }
+</style>
+</head>
+
+<body>
+
+<h2>スライドパズル</h2>
+
+<button onclick="shuffle()">シャッフル</button>
+<button onclick="solve()">高速自動解法（IDA*）</button>
+
+<div id="board"></div>
+
+<h3>初期配置（カンマ区切り）</h3>
+<input id="input">
+<button onclick="apply()">適用</button>
+
+<h3>ゴール配置（カンマ区切り）</h3>
+<input id="goalInput">
+<button onclick="applyGoal()">適用</button>
+
+<script>
+const size = 4;
+
+let goal = [
+ 1,2,3,4,
+ 5,6,7,8,
+ 9,10,11,12,
+ 13,14,15,0
+];
+
+let board = [...goal];
+
+// 初期化
+window.onload = () => {
+  document.getElementById("input").value = board.join(",");
+  document.getElementById("goalInput").value = goal.join(",");
+  draw();
+};
+
+// 描画
+function draw(){
+ const el = document.getElementById("board");
+ el.innerHTML = "";
+
+ board.forEach((num,i)=>{
+   const d = document.createElement("div");
+   d.className = "tile" + (num===0 ? " empty":"");
+   d.textContent = num===0 ? "" : num;
+   d.onclick = ()=>move(i);
+   el.appendChild(d);
+ });
+}
+
+// 移動
+function move(i){
+ const empty = board.indexOf(0);
+
+ const r=Math.floor(i/size), c=i%size;
+ const er=Math.floor(empty/size), ec=empty%size;
+
+ if(Math.abs(r-er)+Math.abs(c-ec)!==1) return;
+
+ [board[i],board[empty]]=[board[empty],board[i]];
+ draw();
+}
+
+// シャッフル（解ける配置）
+function shuffle(){
+ for(let i=0;i<150;i++){
+   const neighbors = getNeighbors(board);
+   board = neighbors[Math.floor(Math.random()*neighbors.length)];
+ }
+ draw();
+}
+
+// 隣接取得
+function getNeighbors(b){
+ const res=[];
+ const empty = b.indexOf(0);
+
+ const r=Math.floor(empty/size);
+ const c=empty%size;
+
+ [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dr,dc])=>{
+   const nr=r+dr, nc=c+dc;
+   if(nr>=0 && nr<size && nc>=0 && nc<size){
+     const ni = nr*size+nc;
+     const newB = [...b];
+     [newB[empty], newB[ni]]=[newB[ni], newB[empty]];
+     res.push(newB);
+   }
+ });
+
+ return res;
+}
+
+// マンハッタン距離
+function manhattan(b){
+ let d=0;
+ for(let i=0;i<b.length;i++){
+   const num=b[i];
+   if(num===0) continue;
+
+   const gi = goal.indexOf(num);
+
+   const r1=Math.floor(i/size), c1=i%size;
+   const r2=Math.floor(gi/size), c2=gi%size;
+
+   d += Math.abs(r1-r2)+Math.abs(c1-c2);
+ }
+ return d;
+}
+
+// ===== IDA* =====
+
+let resultPath=null;
+
+function idaStar(start){
+ let bound = manhattan(start);
+
+ while(true){
+   const visited = new Set();
+   const t = dfs(start,0,bound,visited,[]);
+
+   if(t === true) return resultPath;
+   if(t === Infinity) return null;
+
+   bound = t;
+ }
+}
+
+function dfs(node,g,bound,visited,path){
+ const f = g + manhattan(node);
+ if(f > bound) return f;
+
+ const key = node.join(",");
+ if(visited.has(key)) return Infinity;
+ visited.add(key);
+
+ if(key === goal.join(",")){
+   resultPath = [...path];
+   return true;
+ }
+
+ let min = Infinity;
+
+ for(const next of getNeighbors(node)){
+   const t = dfs(next,g+1,bound,visited,[...path,next]);
+
+   if(t === true) return true;
+   if(t < min) min = t;
+ }
+
+ visited.delete(key);
+ return min;
+}
+
+// 解く
+async function solve(){
+ resultPath = null;
+
+ const path = idaStar(board);
+
+ if(!path){
+   alert("解けません");
+   return;
+ }
+
+ for(const step of path){
+   await new Promise(r=>setTimeout(r,80));
+   board = step;
+   draw();
+ }
+}
+
+// 入力適用
+function apply(){
+ const val = document.getElementById("input").value
+   .split(",").map(Number);
+
+ if(val.length === size*size){
+   board = val;
+   draw();
+ }
+}
+
+// ゴール設定
+function applyGoal(){
+ const val = document.getElementById("goalInput").value
+   .split(",").map(Number);
+
+ if(val.length === size*size){
+   goal = val;
+ }
+}
+</script>
+
+</body>
+</html>
